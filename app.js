@@ -522,58 +522,101 @@ if(item.unit==='stock'){
     const priorRegularClose=positive(numOrNull(quote.regularMarketPreviousClose))??lastOf(priorRegularBars)??dailyPriorClose;
     const priorPreClose=lastOf(priorPreBars);
 
-    const currentPre=positive(quoteToday('preMarketPrice','preMarketTime'))??positive(metaToday('preMarketPrice','preMarketTime'))??lastOf(preToday);
+    // 프리마켓 quote는 오늘 날짜의 값인지 확인하되, Yahoo가 시간 필드를 생략한 경우
+    // 가격 자체가 유효하면 사용합니다. 다른 날짜의 오래된 프리마켓 값은 사용하지 않습니다.
+    const quotePreTimestamp=dateAt(quote.preMarketTime);
+    const metaPreTimestamp=dateAt(sessionMeta.preMarketTime)??dateAt(meta.preMarketTime);
+    const quotePrePrice=positive(numOrNull(quote.preMarketPrice));
+    const metaPrePrice=positive(numOrNull(sessionMeta.preMarketPrice))??positive(numOrNull(meta.preMarketPrice));
+    const currentPre=(quotePrePrice!==null&&(quotePreTimestamp===today||quotePreTimestamp===null)?quotePrePrice:null)??
+      (metaPrePrice!==null&&(metaPreTimestamp===today||metaPreTimestamp===null)?metaPrePrice:null)??lastOf(preToday);
     const currentRegular=positive(quoteToday('regularMarketPrice','regularMarketTime'))??positive(metaToday('regularMarketPrice','regularMarketTime'))??lastOf(regularToday);
-    const currentPost=positive(quoteToday('postMarketPrice','postMarketTime'))??positive(metaToday('postMarketPrice','postMarketTime'))??lastOf(postToday);
+    // 애프터마켓 quote는 오늘 날짜의 데이터만 사용합니다.
+    // Yahoo가 postMarketTime을 생략하는 경우에는 유효한 가격을 허용하고,
+    // 시간이 다른 날짜로 확인되면 오래된 가격을 제외한 뒤 1분봉으로 보완합니다.
+    const quotePostTimestamp=dateAt(quote.postMarketTime);
+    const metaPostTimestamp=dateAt(sessionMeta.postMarketTime)??dateAt(meta.postMarketTime);
+    const quotePostPrice=positive(numOrNull(quote.postMarketPrice));
+    const metaPostPrice=positive(numOrNull(sessionMeta.postMarketPrice))??positive(numOrNull(meta.postMarketPrice));
+    const currentPost=
+      (quotePostPrice!==null&&(quotePostTimestamp===today||quotePostTimestamp===null)?quotePostPrice:null)??
+      (metaPostPrice!==null&&(metaPostTimestamp===today||metaPostTimestamp===null)?metaPostPrice:null)??
+      lastOf(postToday);
 
-    // 세션 종가는 해당 날짜의 분봉 마지막 값 또는 당일 quote 값으로 확정합니다.
+    // 프리마켓 종가는 당일 프리마켓 분봉의 마지막 체결가를 우선하고,
+    // 분봉이 없으면 오늘 날짜로 확인된 Yahoo preMarketPrice를 사용합니다.
     const preClose=lastOf(preToday)??currentPre;
     const regularClose=lastOf(regularToday)??currentRegular;
-    const postClose=lastOf(postToday)??currentPost;
 
     // 프리마켓 04:00~09:30 / 정규장 09:30~16:00 / 애프터마켓 16:00~20:00 (미 동부시간)
     const beforePremarket=isWeekend||minute<240;
     let prePrice;
     if(beforePremarket)prePrice=priorPreClose??priorRegularClose;
-    else if(minute<570)prePrice=currentPre??priorPreClose??priorRegularClose;
-    else prePrice=preClose??priorPreClose??priorRegularClose;
+    else if(minute<570)prePrice=currentPre??lastOf(preToday)??priorPreClose??priorRegularClose;
+    else prePrice=preClose??currentPre??priorPreClose??priorRegularClose;
 
-    // 정규장 칸은 상단 현재가와 동일한 Yahoo 정규장 quote 필드를 우선 사용합니다.
-    // 장 시작 전에는 직전 거래일 정규장 종가, 장중에는 당일 최근 체결가,
-    // 장 종료 후에는 당일 정규장 종가가 regularMarketPrice로 제공됩니다.
-    // Yahoo 일봉 chart의 meta.regularMarketPrice는 상단 정규장 현재가와 같은 기준값입니다.
-    // regularMarketTime 날짜를 검사해 버리면 장전/장후에 직전 종가가 누락될 수 있으므로
-    // 가격 필드 자체를 우선 사용하고, 없을 때만 quote 및 세션 데이터로 보완합니다.
-    const regularMetaPrice=positive(numOrNull(meta.regularMarketPrice))??positive(numOrNull(sessionMeta.regularMarketPrice));
-    const quoteRegularPrice=positive(numOrNull(quote.regularMarketPrice));
-    let regularPrice=regularMetaPrice??quoteRegularPrice;
-    if(regularPrice===null){
-      if(beforePremarket||minute<570)regularPrice=priorRegularClose;
-      else if(minute<960)regularPrice=currentRegular;
-      else regularPrice=regularClose;
+    // 정규장 칸은 기존 계산을 그대로 유지합니다.
+    const regularPrice=positive(values[values.length-1]?.value);
+    const regularReferenceClose=positive(values[values.length-2]?.value);
+
+    // 날짜별 정규장 종가를 만든 뒤, 각 날짜의 애프터마켓 종가와 짝을 맞춥니다.
+    // Yahoo postMarketPrice는 postMarketTime이 해당 날짜의 16:00~20:00 ET인지
+    // 확인된 경우에만 사용하고, 그 외에는 1분봉을 기준으로 삼습니다.
+    const dailyCloseByDate=new Map();
+    for(const point of values){
+      const date=dateAt(point.time);
+      if(date)dailyCloseByDate.set(date,point.value);
     }
-    const regularReferenceClose=
-      positive(numOrNull(meta.chartPreviousClose))??
-      positive(numOrNull(meta.previousClose))??
-      priorRegularClose;
-    const quoteRegularMatches=quoteRegularPrice!==null&&regularPrice!==null&&Math.abs(quoteRegularPrice-regularPrice)<0.000001;
+    const regularCloseForDate=date=>{
+      const sameDayRegular=bars.filter(b=>b.date===date&&b.minute>=570&&b.minute<960);
+      return lastOf(sameDayRegular)??dailyCloseByDate.get(date)??null;
+    };
+    const postQuoteParts=quotePostTimestamp?partsAt(quote.postMarketTime):null;
+    const postQuoteMinute=postQuoteParts?Number(postQuoteParts.hour)*60+Number(postQuoteParts.minute):null;
+    const quotePostIsSessionTime=postQuoteMinute!==null&&postQuoteMinute>=960&&postQuoteMinute<1200;
+    const postDates=[...new Set(bars.filter(b=>b.minute>=960&&b.minute<1200).map(b=>b.date))];
+    if(quotePostPrice!==null&&quotePostTimestamp&&quotePostTimestamp<today&&quotePostIsSessionTime)postDates.push(quotePostTimestamp);
+    const latestCompletedPostDate=postDates.filter(date=>date<today).sort().at(-1)??null;
+    const todayPostBars=bars.filter(b=>b.date===today&&b.minute>=960&&b.minute<1200);
+    const latestCompletedPostBars=latestCompletedPostDate?bars.filter(b=>b.date===latestCompletedPostDate&&b.minute>=960&&b.minute<1200):[];
 
+    const todayQuotePostPrice=quotePostPrice!==null&&quotePostTimestamp===today&&quotePostIsSessionTime?quotePostPrice:null;
+    const completedQuotePostPrice=quotePostPrice!==null&&quotePostTimestamp===latestCompletedPostDate&&quotePostIsSessionTime?quotePostPrice:null;
+    const todayPostClose=lastOf(todayPostBars)??todayQuotePostPrice;
+    const latestCompletedPostClose=lastOf(latestCompletedPostBars)??completedQuotePostPrice;
+
+    // 애프터마켓 표시 규칙:
+    // 04:00 이전 = 가장 최근 완료된 애프터마켓 종가(해당 날짜 정규장 종가 대비)
+    // 04:00~16:00 = 공란
+    // 16:00~20:00 = 오늘 애프터마켓 최근 체결가(오늘 정규장 종가 대비)
+    // 20:00 이후 = 오늘 애프터마켓 종가(오늘 정규장 종가 대비), 다음 04:00까지 유지
     let postPrice=null;
-    if(beforePremarket)postPrice=priorRegularClose;
-    else if(minute<960)postPrice=null;
-    else if(minute<1200)postPrice=currentPost;
-    else postPrice=postClose;
+    let postReference=null;
+    if(beforePremarket){
+      postPrice=latestCompletedPostClose;
+      postReference=latestCompletedPostDate?regularCloseForDate(latestCompletedPostDate):null;
+    }else if(minute<960){
+      postPrice=null;
+      postReference=null;
+    }else if(minute<1200){
+      postPrice=todayQuotePostPrice??lastOf(todayPostBars);
+      postReference=regularClose;
+    }else{
+      postPrice=todayPostClose;
+      postReference=regularClose;
+    }
 
     const change=(price,base)=>positive(price)!==null&&positive(base)!==null?price-base:null;
     const pct=(delta,base)=>delta!==null&&positive(base)!==null?delta/base*100:null;
-    const preDelta=beforePremarket?change(prePrice,priorRegularClose):
-      (minute<570?numOrNull(quote.preMarketChange)??change(prePrice,priorRegularClose):change(prePrice,priorRegularClose));
-    const regularDelta=numOrNull(meta.regularMarketChange)??(quoteRegularMatches?numOrNull(quote.regularMarketChange):null)??change(regularPrice,regularReferenceClose);
-    const regularPct=numOrNull(meta.regularMarketChangePercent)??(quoteRegularMatches?numOrNull(quote.regularMarketChangePercent):null)??pct(regularDelta,regularReferenceClose);
-    const postReference=regularClose??currentRegular??priorRegularClose;
-    const postDelta=beforePremarket?0:(postPrice===null?null:numOrNull(quote.postMarketChange)??change(postPrice,postReference));
+    // 프리마켓 등락과 등락률은 직전 거래일 정규장 종가를 기준으로 계산합니다.
+    const preReferenceClose=regularReferenceClose??priorRegularClose;
+    const preDelta=change(prePrice,preReferenceClose);
+    const regularDelta=change(regularPrice,regularReferenceClose);
+    const regularPct=pct(regularDelta,regularReferenceClose);
+    // 애프터마켓은 해당 애프터마켓 세션과 같은 날짜의 정규장 종가를 기준으로 계산합니다.
+    const postDelta=postPrice===null?null:change(postPrice,postReference);
     sessionQuotes={
-      preMarketPrice:prePrice,preMarketChange:preDelta,preMarketChangePercent:pct(preDelta,priorRegularClose),
+      preMarketPrice:prePrice,preMarketChange:preDelta,preMarketChangePercent:pct(preDelta,preReferenceClose),
       regularMarketPrice:regularPrice,regularMarketChange:regularDelta,regularMarketChangePercent:regularPct,
       postMarketPrice:postPrice,postMarketChange:postDelta,postMarketChangePercent:pct(postDelta,postReference)
     };
