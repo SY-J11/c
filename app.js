@@ -9,6 +9,7 @@ const groups=[
     {id:'sp500',no:2,name:'S&P 500',ticker:'^GSPC',unit:'index',percentChart:true},
     {id:'nasdaq-futures',no:1,name:'나스닥 선물',ticker:'NQ=F',unit:'index',decimals:2,percentChart:true},
     {id:'sp500-futures',no:2,name:'S&P 500 선물',ticker:'ES=F',unit:'index',decimals:2,percentChart:true},
+    {id:'ewy',no:'',name:'iShares MSCI South Korea ETF',ticker:'EWY',unit:'stock',decimals:2},
     {id:'sox',no:5,name:'필라델피아 반도체 지수',ticker:'^SOX',unit:'index',percentChart:true},
     {id:'nvda-m7',no:6,name:'엔비디아',ticker:'NVDA',unit:'stock',percentChart:true},
     {id:'aapl',no:6,name:'애플',ticker:'AAPL',unit:'stock',percentChart:true},
@@ -35,8 +36,7 @@ const groups=[
   ]},
   {label:'국내 증시',items:[
     {id:'kospi200night',no:3,name:'코스피200 야간선물',source:'kredNightFutures',page:'https://kred.dev/ko/kospi-200-night-futures',unit:'futures',decimals:2},
-    {id:'kosdaq150night',no:4,name:'코스닥150 야간선물',source:'kredNightFutures',page:'https://kred.dev/ko/kosdaq-150-night-futures',unit:'futures',decimals:2},
-    {id:'ewy',no:'',name:'iShares MSCI South Korea ETF',ticker:'EWY',unit:'stock',decimals:2}
+    {id:'kosdaq150night',no:4,name:'코스닥150 야간선물',source:'kredNightFutures',page:'https://kred.dev/ko/kosdaq-150-night-futures',unit:'futures',decimals:2}
   ]}
 ];
 // SOXQ가 추종하는 PHLX Semiconductor Sector Index의 구성 종목 풀(현행 30개 종목).
