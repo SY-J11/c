@@ -9,7 +9,6 @@ const groups=[
     {id:'sp500',no:2,name:'S&P 500',ticker:'^GSPC',unit:'index',percentChart:true},
     {id:'nasdaq-futures',no:1,name:'나스닥 선물',ticker:'NQ=F',unit:'index',decimals:2,percentChart:true},
     {id:'sp500-futures',no:2,name:'S&P 500 선물',ticker:'ES=F',unit:'index',decimals:2,percentChart:true},
-    {id:'ewy',no:'',name:'iShares MSCI South Korea ETF',ticker:'EWY',unit:'stock',decimals:2},
     {id:'sox',no:5,name:'필라델피아 반도체 지수',ticker:'^SOX',unit:'index',percentChart:true},
     {id:'nvda-m7',no:6,name:'엔비디아',ticker:'NVDA',unit:'stock',percentChart:true},
     {id:'aapl',no:6,name:'애플',ticker:'AAPL',unit:'stock',percentChart:true},
@@ -36,7 +35,8 @@ const groups=[
   ]},
   {label:'국내 증시',items:[
     {id:'kospi200night',no:3,name:'코스피200 야간선물',source:'kredNightFutures',page:'https://kred.dev/ko/kospi-200-night-futures',unit:'futures',decimals:2},
-    {id:'kosdaq150night',no:4,name:'코스닥150 야간선물',source:'kredNightFutures',page:'https://kred.dev/ko/kosdaq-150-night-futures',unit:'futures',decimals:2}
+    {id:'kosdaq150night',no:4,name:'코스닥150 야간선물',source:'kredNightFutures',page:'https://kred.dev/ko/kosdaq-150-night-futures',unit:'futures',decimals:2},
+    {id:'ewy',no:'',name:'iShares MSCI South Korea ETF',ticker:'EWY',unit:'stock',decimals:2}
   ]}
 ];
 // SOXQ가 추종하는 PHLX Semiconductor Sector Index의 구성 종목 풀(현행 30개 종목).
@@ -432,7 +432,7 @@ function makeSummary(){
 function makeCharts(){
   const root=$('charts');root.innerHTML='';
   groups.forEach(group=>{
-    let visibleItems=group.items.filter(item=>item.source!=='kredNightFutures'&&(!item.semiconductorCandidate||item.summaryActive));
+    let visibleItems=group.items.filter(item=>item.id!=='ewy'&&item.source!=='kredNightFutures'&&(!item.semiconductorCandidate||item.summaryActive));
     const m7Set=new Set(M7_IDS);
     const byCap=(a,b)=>{const av=Number.isFinite(a.marketCap)&&a.marketCap>0?a.marketCap:null,bv=Number.isFinite(b.marketCap)&&b.marketCap>0?b.marketCap:null;if(av===null&&bv===null)return group.items.indexOf(a)-group.items.indexOf(b);if(av===null)return 1;if(bv===null)return -1;return bv-av;};
     visibleItems.sort((a,b)=>{if(m7Set.has(a.id)&&m7Set.has(b.id))return byCap(a,b);if(a.semiconductorCandidate&&b.semiconductorCandidate)return byCap(a,b);return group.items.indexOf(a)-group.items.indexOf(b);});
@@ -440,6 +440,17 @@ function makeCharts(){
     const heading=document.createElement('div');heading.className='section-heading group-heading';heading.innerHTML=`<div><span class="eyebrow">${group.label==='미국 증시'?'U.S. MARKETS':group.label==='금리·환율·원자재'?'RATES · FX · COMMODITIES':'KOREA MARKETS'}</span><h2>${group.label}</h2></div>`;root.appendChild(heading);
     let semiconductorWrap=null;
     visibleItems.forEach(item=>{
+      // EWY remains in the domestic data/summary group, but its chart is displayed above SOX.
+      if(item.id==='sox'){
+        const ewy=all.find(candidate=>candidate.id==='ewy');
+        if(ewy){
+          const ewyCard=document.createElement('article');
+          ewyCard.className='chart-card';
+          ewyCard.id=`chart-card-${ewy.id}`;
+          ewyCard.innerHTML=`<div class="chart-top"><div class="chart-title"><span class="number">+</span><h3>${ewy.name} [${ewy.ticker}]</h3></div><div class="quote-block"><div class="quote-close">${blank}</div><div class="quote-change neutral">${blank} · ${blank}</div><div class="quote-date">종가 기준</div></div></div><div class="chart-range-toolbar" data-range-for="${ewy.id}"><button type="button" data-range="1M">1M</button><button type="button" data-range="3M\" class="selected">3M</button><button type="button" data-range="6M">6M</button><button type="button" data-range="YTD">YTD</button><button type="button" data-range="1Y">1Y</button><button type="button" data-range="ALL">ALL</button></div><div id="chart-${ewy.id}" class="chart-area"><div class="chart-empty">시세 데이터를 불러오는 중…</div></div><div class="chart-foot"><span class="chart-note">${ewy.ticker}</span><span class="bar-count">전체 기간 데이터</span></div>`;
+          ewy.card=ewyCard;root.appendChild(ewyCard);
+        }
+      }
       if(item.id==='us2y'){
         // Keep the activity controls after the SOX, M7, and SK hynix chart cards.
         Object.entries(ACTIVITY_TYPES).forEach(([type,config])=>{
