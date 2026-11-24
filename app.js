@@ -367,9 +367,9 @@ function makeSummary(){
     {items:[{no:5,id:'sox',name:'필라델피아 반도체 지수',ticker:'^SOX'}],single:true,semis,after:true},
     ...m7Rows.map((items,index)=>({items,m7:true,after:index===3})),
     {items:aiLeaderRefs,after:true},
+    {hyperscalerToggle:true,after:true},
     {activityType:'turnover'},
     {activityType:'volume',after:true},
-    {hyperscalerToggle:true,after:true},
     {items:[{no:9,id:'us2y',name:'미국 2년물'},{no:10,id:'us10y',name:'미국 10년물'}]},
     {items:[{no:11,id:'us30y',name:'미국 30년물'},{no:12,id:'highyield',name:'하이일드 스프레드'}],after:true},
     {items:[{no:13,id:'dxy',name:'달러인덱스'},{no:14,id:'usdkRW',name:'원/달러'}]},
@@ -499,6 +499,24 @@ function makeCharts(){
           const activityGrid=document.createElement('div');activityGrid.className='activity-chart-grid';activityGrid.id=config.chartContainerId;activityGrid.hidden=!config.expanded;controlCell.appendChild(activityGrid);
           root.appendChild(controlCell);
         });
+        const ratesHeading=document.createElement('div');ratesHeading.className='section-heading group-heading';
+        ratesHeading.innerHTML='<div><span class="eyebrow">RATES · FX · COMMODITIES</span><h2>금리·환율·원자재</h2></div>';
+        root.appendChild(ratesHeading);
+      }
+      if(item.id==='vix'){
+        const volatilityHeading=document.createElement('div');volatilityHeading.className='section-heading group-heading';
+        volatilityHeading.innerHTML='<div><span class="eyebrow">VOLATILITY · MARKET RISK</span><h2>변동성 · 시장 위험</h2></div>';
+        root.appendChild(volatilityHeading);
+      }
+      const card=document.createElement('article');
+      card.className='chart-card'+(['sox','nvda-m7','us2y','vix'].includes(item.id)?' chart-divider-before':'');
+      card.id=`chart-card-${item.id}`;
+      card.innerHTML=`<div class="chart-top"><div class="chart-title"><span class="number">${item.id==='ewy'?'+' : item.no}</span><h3>${item.name}${item.ticker?` [${item.ticker}]`:''}</h3></div><div class="quote-block"><div class="quote-close">${blank}</div><div class="quote-change neutral">${blank} · ${blank}</div><div class="quote-date">종가 기준</div></div></div><div class="chart-range-toolbar" data-range-for="${item.id}"><button type="button" data-range="1M">1M</button><button type="button" data-range="3M" class="selected">3M</button><button type="button" data-range="6M">6M</button><button type="button" data-range="YTD">YTD</button><button type="button" data-range="1Y">1Y</button><button type="button" data-range="ALL">ALL</button></div><div id="chart-${item.id}" class="chart-area"><div class="chart-empty">시세 데이터를 불러오는 중…</div></div><div class="chart-foot"><span class="chart-note">${item.ticker||''}</span><span class="bar-count">전체 기간 데이터</span></div>`;
+      if(item.semiconductorCandidate&&semiconductorWrap){semiconductorWrap.appendChild(card);}
+      else root.appendChild(card);
+      item.card=card;
+      if(item.id==='coreweave'){
+        // Place the hyperscaler control directly after the Anthropic/CoreWeave chart row.
         const hyperscalerControl=document.createElement('article');
         hyperscalerControl.className='chart-card activity-chart-control-cell';
         hyperscalerControl.dataset.hyperscalerControlCard='true';
@@ -520,22 +538,7 @@ function makeCharts(){
         });
         hyperscalerControl.appendChild(hyperscalerGrid);
         root.appendChild(hyperscalerControl);
-        const ratesHeading=document.createElement('div');ratesHeading.className='section-heading group-heading';
-        ratesHeading.innerHTML='<div><span class="eyebrow">RATES · FX · COMMODITIES</span><h2>금리·환율·원자재</h2></div>';
-        root.appendChild(ratesHeading);
       }
-      if(item.id==='vix'){
-        const volatilityHeading=document.createElement('div');volatilityHeading.className='section-heading group-heading';
-        volatilityHeading.innerHTML='<div><span class="eyebrow">VOLATILITY · MARKET RISK</span><h2>변동성 · 시장 위험</h2></div>';
-        root.appendChild(volatilityHeading);
-      }
-      const card=document.createElement('article');
-      card.className='chart-card'+(['sox','nvda-m7','us2y','vix'].includes(item.id)?' chart-divider-before':'');
-      card.id=`chart-card-${item.id}`;
-      card.innerHTML=`<div class="chart-top"><div class="chart-title"><span class="number">${item.id==='ewy'?'+' : item.no}</span><h3>${item.name}${item.ticker?` [${item.ticker}]`:''}</h3></div><div class="quote-block"><div class="quote-close">${blank}</div><div class="quote-change neutral">${blank} · ${blank}</div><div class="quote-date">종가 기준</div></div></div><div class="chart-range-toolbar" data-range-for="${item.id}"><button type="button" data-range="1M">1M</button><button type="button" data-range="3M" class="selected">3M</button><button type="button" data-range="6M">6M</button><button type="button" data-range="YTD">YTD</button><button type="button" data-range="1Y">1Y</button><button type="button" data-range="ALL">ALL</button></div><div id="chart-${item.id}" class="chart-area"><div class="chart-empty">시세 데이터를 불러오는 중…</div></div><div class="chart-foot"><span class="chart-note">${item.ticker||''}</span><span class="bar-count">전체 기간 데이터</span></div>`;
-      if(item.semiconductorCandidate&&semiconductorWrap){semiconductorWrap.appendChild(card);}
-      else root.appendChild(card);
-      item.card=card;
       if(item.id==='sox'){ 
         const toggle=createSemiconductorToggle();toggle.classList.add('semiconductor-toggle-in-chart');card.appendChild(toggle);
         semiconductorWrap=document.createElement('div');semiconductorWrap.className='chart-semiconductor-content';semiconductorWrap.dataset.semiconductorContent='true';semiconductorWrap.hidden=!semiconductorExpanded;card.appendChild(semiconductorWrap);
