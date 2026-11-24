@@ -589,8 +589,9 @@ if(item.unit==='stock'){
     const positive=value=>Number.isFinite(value)&&value>0?value:null;
 
     // 전일 정규장 종가: quote의 previousClose를 우선하고, 없으면 직전 정규장 1분봉/일봉 사용.
-    const dailyPriorClose=values.length>1?values[values.length-2].value:null;
-    const priorRegularClose=positive(numOrNull(quote.regularMarketPreviousClose))??lastOf(priorRegularBars)??dailyPriorClose;
+    const dailyPriorClose=[...values].filter(point=>dailySessionDate(point.time)<today&&positive(point.value)!==null).at(-1)?.value??null;
+    // 전일 기준가는 Yahoo previousClose보다 일봉에서 확인한 직전 거래일 정규장 종가를 우선 사용합니다.
+    const priorRegularClose=positive(dailyPriorClose)??positive(lastOf(priorRegularBars))??positive(numOrNull(quote.regularMarketPreviousClose));
     const priorPreClose=lastOf(priorPreBars);
 
     // 프리마켓 quote는 오늘 날짜의 값인지 확인하되, Yahoo가 시간 필드를 생략한 경우
@@ -653,10 +654,9 @@ if(item.unit==='stock'){
       positive(dailyCloseByDate.get(today))??
       null;
     const regularReferenceClose=
-      positive(numOrNull(quote.regularMarketPreviousClose))??
+      positive(dailyPriorClose)??
       positive(lastOf(priorRegularBars))??
-      [...dailyCloseByDate.entries()].filter(([date,value])=>date<today&&positive(value)!==null).at(-1)?.[1]??
-      positive(values[values.length-2]?.value);
+      positive(numOrNull(quote.regularMarketPreviousClose));
 
     // 날짜별 정규장 종가를 만든 뒤, 각 날짜의 애프터마켓 종가와 짝을 맞춥니다.
     // Yahoo 일봉은 UTC 날짜, 1분봉 및 확장거래 timestamp는 뉴욕 현지 날짜로 분리 처리합니다.
@@ -673,11 +673,16 @@ if(item.unit==='stock'){
     const todayPostBars=bars.filter(b=>b.date===today&&b.minute>=960&&b.minute<1200);
     const latestCompletedPostBars=latestCompletedPostDate?bars.filter(b=>b.date===latestCompletedPostDate&&b.minute>=960&&b.minute<1200):[];
 
-    const todayQuotePostPrice=quotePostPrice!==null&&quotePostTimestamp===today&&quotePostIsSessionTime?quotePostPrice:null;
+    const nowEpoch=Math.floor(Date.now()/1000);
+    const latestTodayPostBar=todayPostBars.at(-1)??null;
+    const todayPostBarsFresh=latestTodayPostBar!==null&&(nowEpoch-latestTodayPostBar.time)<=15*60;
+    const quotePostFresh=quotePostTimestamp===today&&postQuoteMinute!==null&&postQuoteMinute>=960&&postQuoteMinute<1200&&quote.postMarketTime&& (nowEpoch-Number(quote.postMarketTime))<=15*60;
+    const todayQuotePostPrice=quotePostFresh?quotePostPrice:null;
     const completedQuotePostPrice=quotePostPrice!==null&&quotePostTimestamp===latestCompletedPostDate&&quotePostIsSessionTime?quotePostPrice:null;
     // 오늘 애프터마켓은 당일 1분봉의 가장 최근 체결가를 우선합니다.
     // Yahoo postMarketPrice는 timestamp가 오늘 세션과 일치할 때만 보완값으로 사용합니다.
-    const todayPostClose=lastOf(todayPostBars)??todayQuotePostPrice;
+    // 20:00 이후에는 오늘 완료된 애프터마켓 종가를 유지하고, 세션 중에는 신선한 데이터만 허용합니다.
+    const todayPostClose=lastOf(todayPostBars)??(quotePostTimestamp===today&&quotePostIsSessionTime?quotePostPrice:null);
     const latestCompletedPostClose=lastOf(latestCompletedPostBars)??completedQuotePostPrice;
 
     // 애프터마켓 표시 규칙:
@@ -694,7 +699,7 @@ if(item.unit==='stock'){
       postPrice=null;
       postReference=null;
     }else if(minute<1200){
-      postPrice=lastOf(todayPostBars)??todayQuotePostPrice;
+      postPrice=(todayPostBarsFresh?lastOf(todayPostBars):null)??todayQuotePostPrice;
       postReference=regularClose;
     }else{
       postPrice=todayPostClose;
