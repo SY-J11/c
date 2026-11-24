@@ -597,8 +597,10 @@ if(item.unit==='stock'){
     const metaPreTimestamp=dateAt(sessionMeta.preMarketTime)??dateAt(meta.preMarketTime);
     const quotePrePrice=positive(numOrNull(quote.preMarketPrice));
     const metaPrePrice=positive(numOrNull(sessionMeta.preMarketPrice))??positive(numOrNull(meta.preMarketPrice));
-    const currentPre=(quotePrePrice!==null&&(quotePreTimestamp===today||quotePreTimestamp===null)?quotePrePrice:null)??
-      (metaPrePrice!==null&&(metaPreTimestamp===today||metaPreTimestamp===null)?metaPrePrice:null)??lastOf(preToday);
+    // 시각이 누락된 Yahoo 확장거래 가격은 이전 세션 값일 수 있으므로 사용하지 않습니다.
+    // 거래소 현지 날짜가 오늘로 확인된 가격만 허용하고, 없으면 오늘 1분봉으로 보완합니다.
+    const currentPre=(quotePrePrice!==null&&quotePreTimestamp===today?quotePrePrice:null)??
+      (metaPrePrice!==null&&metaPreTimestamp===today?metaPrePrice:null)??lastOf(preToday);
     const currentRegular=positive(quoteToday('regularMarketPrice','regularMarketTime'))??positive(metaToday('regularMarketPrice','regularMarketTime'))??lastOf(regularToday);
     // 애프터마켓 quote는 오늘 날짜의 데이터만 사용합니다.
     // Yahoo가 postMarketTime을 생략하는 경우에는 유효한 가격을 허용하고,
@@ -607,9 +609,11 @@ if(item.unit==='stock'){
     const metaPostTimestamp=dateAt(sessionMeta.postMarketTime)??dateAt(meta.postMarketTime);
     const quotePostPrice=positive(numOrNull(quote.postMarketPrice));
     const metaPostPrice=positive(numOrNull(sessionMeta.postMarketPrice))??positive(numOrNull(meta.postMarketPrice));
+    // 애프터마켓도 거래소 현지 날짜가 오늘로 확인된 가격만 사용합니다.
+    // timestamp가 없는 오래된 quote/meta 값은 제외해 세션 간 가격 혼선을 방지합니다.
     const currentPost=
-      (quotePostPrice!==null&&(quotePostTimestamp===today||quotePostTimestamp===null)?quotePostPrice:null)??
-      (metaPostPrice!==null&&(metaPostTimestamp===today||metaPostTimestamp===null)?metaPostPrice:null)??
+      (quotePostPrice!==null&&quotePostTimestamp===today?quotePostPrice:null)??
+      (metaPostPrice!==null&&metaPostTimestamp===today?metaPostPrice:null)??
       lastOf(postToday);
 
     // 프리마켓 종가는 당일 프리마켓 분봉의 마지막 체결가를 우선하고,
