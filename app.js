@@ -561,6 +561,8 @@ if(item.unit==='stock'){
     const nowParts=Object.fromEntries(formatter.formatToParts(new Date()).map(p=>[p.type,p.value]));
     const today=`${nowParts.year}-${nowParts.month}-${nowParts.day}`;
     const dateAt=ts=>Number.isFinite(Number(ts))&&Number(ts)>0?`${partsAt(ts).year}-${partsAt(ts).month}-${partsAt(ts).day}`:null;
+    // Yahoo 일봉 timestamp는 UTC 자정일 수 있으므로 일봉 거래일은 UTC 날짜로 읽습니다.
+    const dailySessionDate=ts=>Number.isFinite(Number(ts))&&Number(ts)>0?new Date(Number(ts)*1000).toISOString().slice(0,10):null;
     const minute=Number(nowParts.hour)*60+Number(nowParts.minute);
     const isWeekend=nowParts.weekday==='Sat'||nowParts.weekday==='Sun';
     const bars=[];
@@ -628,18 +630,30 @@ if(item.unit==='stock'){
     else if(minute<570)prePrice=currentPre??lastOf(preToday)??priorPreClose??priorRegularClose;
     else prePrice=preClose??currentPre??priorPreClose??priorRegularClose;
 
-    // 정규장 칸은 기존 계산을 그대로 유지합니다.
-    const regularPrice=positive(values[values.length-1]?.value);
-    const regularReferenceClose=positive(values[values.length-2]?.value);
-
-    // 날짜별 정규장 종가를 만든 뒤, 각 날짜의 애프터마켓 종가와 짝을 맞춥니다.
-    // Yahoo postMarketPrice는 postMarketTime이 해당 날짜의 16:00~20:00 ET인지
-    // 확인된 경우에만 사용하고, 그 외에는 1분봉을 기준으로 삼습니다.
+    // Yahoo 일봉 timestamp는 UTC 자정으로 제공될 수 있습니다.
+    // 이를 뉴욕 시간으로 변환하면 날짜가 전날로 밀리므로 일봉 날짜는 UTC 기준으로 판정합니다.
     const dailyCloseByDate=new Map();
     for(const point of values){
-      const date=dateAt(point.time);
+      const date=dailySessionDate(point.time);
       if(date)dailyCloseByDate.set(date,point.value);
     }
+
+    // 정규장 가격은 당일 정규장 1분봉 → Yahoo 실시간 정규장 quote →
+    // 해당 미국 거래일의 일봉 순으로 선택합니다. 단순히 일봉 배열의 마지막 값을
+    // 무조건 쓰지 않아, 일봉 갱신 지연 시 전일 종가가 현재 정규장 값으로 오인되는 것을 방지합니다.
+    const regularPrice=
+      positive(regularClose)??
+      positive(currentRegular)??
+      positive(dailyCloseByDate.get(today))??
+      positive(values[values.length-1]?.value);
+    const regularReferenceClose=
+      positive(numOrNull(quote.regularMarketPreviousClose))??
+      positive(lastOf(priorRegularBars))??
+      [...dailyCloseByDate.entries()].filter(([date,value])=>date<today&&positive(value)!==null).at(-1)?.[1]??
+      positive(values[values.length-2]?.value);
+
+    // 날짜별 정규장 종가를 만든 뒤, 각 날짜의 애프터마켓 종가와 짝을 맞춥니다.
+    // Yahoo 일봉은 UTC 날짜, 1분봉 및 확장거래 timestamp는 뉴욕 현지 날짜로 분리 처리합니다.
     const regularCloseForDate=date=>{
       const sameDayRegular=bars.filter(b=>b.date===date&&b.minute>=570&&b.minute<960);
       return lastOf(sameDayRegular)??dailyCloseByDate.get(date)??null;
@@ -653,7 +667,7 @@ if(item.unit==='stock'){
     const todayPostBars=bars.filter(b=>b.date===today&&b.minute>=960&&b.minute<1200);
     const latestCompletedPostBars=latestCompletedPostDate?bars.filter(b=>b.date===latestCompletedPostDate&&b.minute>=960&&b.minute<1200):[];
 
-    const todayQuotePostPrice=quotePostPrice!==null&&quotePostTimestamp===today&&quotePostIsSessionTime?quotePostPrice:null;
+    const todayQuotePostPrice=quotePostPrice!==null&&(quotePostTimestamp===today||quotePostTimestamp===null)&&quotePostIsSessionTime?quotePostPrice:null;
     const completedQuotePostPrice=quotePostPrice!==null&&quotePostTimestamp===latestCompletedPostDate&&quotePostIsSessionTime?quotePostPrice:null;
     const todayPostClose=lastOf(todayPostBars)??todayQuotePostPrice;
     const latestCompletedPostClose=lastOf(latestCompletedPostBars)??completedQuotePostPrice;
@@ -685,7 +699,7 @@ if(item.unit==='stock'){
     // 일봉 종가가 없을 때만 Yahoo 전일 종가, 마지막으로 정규장 1분봉 종가를 대체값으로 사용합니다.
     // 한국 날짜나 일봉 배열의 단순 직전 항목(values[-2])에는 의존하지 않습니다.
     const dailyPriorCloseByExchangeDate=[...values]
-      .filter(point=>{const sessionDate=dateAt(point.time);return sessionDate&&sessionDate<today&&positive(point.value)!==null;})
+      .filter(point=>{const sessionDate=dailySessionDate(point.time);return sessionDate&&sessionDate<today&&positive(point.value)!==null;})
       .at(-1)?.value??null;
     const preReferenceClose=
       positive(dailyPriorCloseByExchangeDate)??
