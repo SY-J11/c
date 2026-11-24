@@ -608,7 +608,10 @@ if(item.unit==='stock'){
     // Yahoo Finance Overnight(Blue Ocean ATS) 값을 기존 애프터마켓 칸에 표시합니다.
     // overnightPrice=true 요청으로 받은 overnightMarket* 필드를 우선 사용합니다.
     // Yahoo가 PREPRE 상태에서 postMarket*에 Overnight 값을 제공하는 경우에만 보조 사용합니다.
-    const isYahooOvernight=String(quote.marketState||'').toUpperCase()==='PREPRE';
+    const yahooMarketState=String(quote.marketState||'').toUpperCase();
+    // Yahoo Finance now reports the Blue Ocean overnight session as OVERNIGHT.
+    // PREPRE is retained only for older responses.
+    const isYahooOvernight=yahooMarketState==='OVERNIGHT'||yahooMarketState==='PREPRE';
     const overnightPrice=positive(numOrNull(quote.overnightMarketPrice)) ??
       (isYahooOvernight?positive(numOrNull(quote.postMarketPrice)):null);
     const overnightDelta=numOrNull(quote.overnightMarketChange) ??
@@ -637,10 +640,14 @@ if(item.unit==='stock'){
     const overnightTimeText=hasOvernightEpoch
       ?new Intl.DateTimeFormat('en-US',{timeZone,hour:'numeric',minute:'2-digit',second:'2-digit',timeZoneName:'short'}).format(new Date(overnightEpoch*1000))
       :null;
-    const validOvernight=currentOvernightSession!==null&&overnightPrice!==null&&
+    // marketState=OVERNIGHT is Yahoo's authoritative indication that the current
+    // quote belongs to the overnight session. Do not reject a valid quote merely
+    // because the chart endpoint reports a different/missing exchange timezone.
+    // Keep a freshness guard so an old overnight quote is never shown as live.
+    const validOvernight=isYahooOvernight&&overnightPrice!==null&&
       (hasOvernightEpoch
-        ?quoteOvernightSession===currentOvernightSession&&overnightEpoch<=nowEpoch+30
-        :Boolean(quote.overnightMarketPrice!==undefined||isYahooOvernight));
+        ?overnightEpoch<=nowEpoch+30&&overnightEpoch>=nowEpoch-12*60*60
+        :Boolean(quote.overnightMarketPrice!==undefined));
     const currentOvernightPrice=validOvernight?overnightPrice:null;
     // 프리마켓 종가는 당일 프리마켓 분봉의 마지막 체결가를 우선하고,
     // 분봉이 없으면 오늘 날짜로 확인된 Yahoo preMarketPrice를 사용합니다.
