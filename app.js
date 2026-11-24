@@ -605,19 +605,14 @@ if(item.unit==='stock'){
     const currentPre=(quotePrePrice!==null&&(quotePreTimestamp===today||quotePreTimestamp===null)?quotePrePrice:null)??
       (metaPrePrice!==null&&(metaPreTimestamp===today||metaPreTimestamp===null)?metaPrePrice:null)??lastOf(preToday);
     const currentRegular=positive(quoteToday('regularMarketPrice','regularMarketTime'))??positive(metaToday('regularMarketPrice','regularMarketTime'))??lastOf(regularToday);
-    // 애프터마켓 quote는 오늘 날짜의 데이터만 사용합니다.
-    // Yahoo가 postMarketTime을 생략하는 경우에는 유효한 가격을 허용하고,
-    // 시간이 다른 날짜로 확인되면 오래된 가격을 제외한 뒤 1분봉으로 보완합니다.
+    // 애프터마켓 가격은 오늘의 1분봉 데이터만 사용합니다. Quote의 postMarketPrice는
+    // 체결 시점과 갱신 시점이 불명확하거나 분봉과 다른 기준일 수 있어 현재 세션 가격에는 사용하지 않습니다.
     const quotePostTimestamp=dateAt(quote.postMarketTime);
     const metaPostTimestamp=dateAt(sessionMeta.postMarketTime)??dateAt(meta.postMarketTime);
     const quotePostPrice=positive(numOrNull(quote.postMarketPrice));
     const metaPostPrice=positive(numOrNull(sessionMeta.postMarketPrice))??positive(numOrNull(meta.postMarketPrice));
-    // 기준 파일과 동일: Yahoo가 postMarketTime을 생략하면 유효한 가격을 허용합니다.
-    // 시간이 다른 날짜로 확인되면 오래된 가격을 제외한 뒤 오늘 1분봉으로 보완합니다.
-    const currentPost=
-      (quotePostPrice!==null&&(quotePostTimestamp===today||quotePostTimestamp===null)?quotePostPrice:null)??
-      (metaPostPrice!==null&&(metaPostTimestamp===today||metaPostTimestamp===null)?metaPostPrice:null)??
-      lastOf(postToday);
+    const currentPost=lastOf(postToday);
+
 
     // 프리마켓 종가는 당일 프리마켓 분봉의 마지막 체결가를 우선하고,
     // 분봉이 없으면 오늘 날짜로 확인된 Yahoo preMarketPrice를 사용합니다.
@@ -668,30 +663,20 @@ if(item.unit==='stock'){
     const postQuoteMinute=postQuoteParts?Number(postQuoteParts.hour)*60+Number(postQuoteParts.minute):null;
     const quotePostIsSessionTime=postQuoteMinute!==null&&postQuoteMinute>=960&&postQuoteMinute<1200;
     const postDates=[...new Set(bars.filter(b=>b.minute>=960&&b.minute<1200).map(b=>b.date))];
-    if(quotePostPrice!==null&&quotePostTimestamp&&quotePostTimestamp<today&&quotePostIsSessionTime)postDates.push(quotePostTimestamp);
     const latestCompletedPostDate=postDates.filter(date=>date<today).sort().at(-1)??null;
-    const todayPostBars=bars.filter(b=>b.date===today&&b.minute>=960&&b.minute<1200);
     const latestCompletedPostBars=latestCompletedPostDate?bars.filter(b=>b.date===latestCompletedPostDate&&b.minute>=960&&b.minute<1200):[];
 
     const nowEpoch=Math.floor(Date.now()/1000);
     const latestTodayPostBar=todayPostBars.at(-1)??null;
-    // 실시간 애프터마켓에는 5분 이내의 타임스탬프가 있는 데이터만 허용합니다.
-    // Yahoo 1분봉과 postMarketPrice 중 더 최근 시점의 값을 선택해 오래된 1분봉이
-    // 더 최신 quote를 덮어쓰거나, timestamp 없는 quote가 실시간처럼 표시되지 않게 합니다.
-    const POST_LIVE_MAX_AGE=5*60;
+    // 1분봉의 시작 시각은 실제 체결 시각보다 최대 1분가량 앞서므로 3분 이내만
+    // 최근 데이터로 인정합니다. Quote는 분봉과 가격 기준이 달라 실시간 후보에서 제외합니다.
+    const POST_LIVE_MAX_AGE=3*60;
     const todayPostBarFresh=latestTodayPostBar!==null&&latestTodayPostBar.time<=nowEpoch&&(nowEpoch-latestTodayPostBar.time)<=POST_LIVE_MAX_AGE;
-    const quotePostFresh=quotePostTimestamp===today&&postQuoteMinute!==null&&postQuoteMinute>=960&&postQuoteMinute<1200&&quote.postMarketTime&&Number(quote.postMarketTime)<=nowEpoch&&(nowEpoch-Number(quote.postMarketTime))<=POST_LIVE_MAX_AGE;
-    const todayQuotePostPrice=quotePostFresh?quotePostPrice:null;
-    const completedQuotePostPrice=quotePostPrice!==null&&quotePostTimestamp===latestCompletedPostDate&&quotePostIsSessionTime?quotePostPrice:null;
-    // 오늘 애프터마켓의 실시간 후보(분봉/quote)를 타임스탬프 기준으로 비교해 가장 최근 값을 선택합니다.
-    const livePostCandidates=[];
-    if(todayPostBarFresh&&latestTodayPostBar)livePostCandidates.push({price:latestTodayPostBar.value,time:latestTodayPostBar.time,source:'1m'});
-    if(quotePostFresh&&todayQuotePostPrice!==null)livePostCandidates.push({price:todayQuotePostPrice,time:Number(quote.postMarketTime),source:'quote'});
-    livePostCandidates.sort((a,b)=>b.time-a.time);
-    const latestLivePost=livePostCandidates[0]??null;
-    // 20:00 이후에는 오늘 완료된 애프터마켓 종가를 유지합니다.
-    const todayPostClose=lastOf(todayPostBars)??(quotePostTimestamp===today&&quotePostIsSessionTime?quotePostPrice:null);
-    const latestCompletedPostClose=lastOf(latestCompletedPostBars)??completedQuotePostPrice;
+    const latestLivePost=todayPostBarFresh?{price:latestTodayPostBar.value,time:latestTodayPostBar.time,source:'1m'}:null;
+    // 애프터마켓 완료 종가도 1분봉에서만 산출하여 Quote와 혼합하지 않습니다.
+    const todayPostClose=lastOf(todayPostBars);
+    const latestCompletedPostClose=lastOf(latestCompletedPostBars);
+
 
     // 애프터마켓 표시 규칙:
     // 04:00 이전 = 가장 최근 완료된 애프터마켓 종가(해당 날짜 정규장 종가 대비)
