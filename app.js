@@ -19,19 +19,19 @@ const groups=[
     {id:'meta',no:6,name:'메타',ticker:'META',unit:'stock',percentChart:true}
   ]},
   {label:'금리·환율·원자재',items:[
-    {id:'us2y',no:8,name:'미국 2년물 국채금리',source:'treasury',treasuryField:'BC_2YEAR',unit:'yield',suffix:'%',decimals:3},
-    {id:'us10y',no:9,name:'미국 10년물 국채금리',source:'treasury',treasuryField:'BC_10YEAR',unit:'yield',suffix:'%',decimals:3},
-    {id:'us30y',no:10,name:'미국 30년물 국채금리',source:'treasury',treasuryField:'BC_30YEAR',unit:'yield',suffix:'%',decimals:3},
-    {id:'highyield',no:11,name:'하이일드 스프레드',source:'fred',ticker:'BAMLH0A0HYM2',unit:'yield',suffix:'%',decimals:2},
-    {id:'dxy',no:12,name:'달러인덱스',ticker:'DX-Y.NYB',unit:'index'},
-    {id:'usdkRW',no:13,name:'원/달러 환율',ticker:'KRW=X',unit:'fx',suffix:'원',decimals:2},
-    {id:'wti',no:14,name:'WTI 유가',ticker:'CL=F',unit:'commodity',suffix:'$',decimals:2},
-    {id:'brent',no:15,name:'브렌트유 유가',ticker:'BZ=F',unit:'commodity',suffix:'$',decimals:2},
-    {id:'gold',no:16,name:'금',ticker:'GC=F',unit:'commodity',suffix:'$',decimals:2},
-    {id:'silver',no:17,name:'은',ticker:'SI=F',unit:'commodity',suffix:'$',decimals:3},
-    {id:'copper',no:18,name:'구리',ticker:'HG=F',unit:'commodity',suffix:'$',decimals:4},
-    {id:'vix',no:19,name:'S&P 500 변동성 지수 VIX',ticker:'^VIX',unit:'index',decimals:2},
-    {id:'vxn',no:17,name:'나스닥 100 변동성 지수 (VXN)',ticker:'^VXN',unit:'index',decimals:2,percentChart:true}
+    {id:'us2y',no:9,name:'미국 2년물 국채금리',source:'treasury',treasuryField:'BC_2YEAR',unit:'yield',suffix:'%',decimals:3},
+    {id:'us10y',no:10,name:'미국 10년물 국채금리',source:'treasury',treasuryField:'BC_10YEAR',unit:'yield',suffix:'%',decimals:3},
+    {id:'us30y',no:11,name:'미국 30년물 국채금리',source:'treasury',treasuryField:'BC_30YEAR',unit:'yield',suffix:'%',decimals:3},
+    {id:'highyield',no:12,name:'하이일드 스프레드',source:'fred',ticker:'BAMLH0A0HYM2',unit:'yield',suffix:'%',decimals:2},
+    {id:'dxy',no:13,name:'달러인덱스',ticker:'DX-Y.NYB',unit:'index'},
+    {id:'usdkRW',no:14,name:'원/달러 환율',ticker:'KRW=X',unit:'fx',suffix:'원',decimals:2},
+    {id:'wti',no:15,name:'WTI 유가',ticker:'CL=F',unit:'commodity',suffix:'$',decimals:2},
+    {id:'brent',no:16,name:'브렌트유 유가',ticker:'BZ=F',unit:'commodity',suffix:'$',decimals:2},
+    {id:'gold',no:17,name:'금',ticker:'GC=F',unit:'commodity',suffix:'$',decimals:2},
+    {id:'silver',no:18,name:'은',ticker:'SI=F',unit:'commodity',suffix:'$',decimals:3},
+    {id:'copper',no:19,name:'구리',ticker:'HG=F',unit:'commodity',suffix:'$',decimals:4},
+    {id:'vix',no:20,name:'S&P 500 변동성 지수 VIX',ticker:'^VIX',unit:'index',decimals:2},
+    {id:'vxn',no:21,name:'나스닥 100 변동성 지수 (VXN)',ticker:'^VXN',unit:'index',decimals:2,percentChart:true}
   ]},
   {label:'국내 증시',items:[
     {id:'kospi200night',no:3,name:'코스피200 야간선물',source:'kredNightFutures',page:'https://kred.dev/ko/kospi-200-night-futures',unit:'futures',decimals:2},
@@ -342,15 +342,15 @@ function makeSummary(){
     {activityType:'turnover'},
     {activityType:'volume',after:true},
     {hyperscalerToggle:true,after:true},
-    {items:[{no:8,id:'us2y',name:'미국 2년물'},{no:9,id:'us10y',name:'미국 10년물'}]},
-    {items:[{no:10,id:'us30y',name:'미국 30년물'},{no:11,id:'highyield',name:'하이일드 스프레드'}],after:true},
-    {items:[{no:12,id:'dxy',name:'달러인덱스'},{no:13,id:'usdkRW',name:'원/달러'}]},
-    {items:[{no:14,id:'wti',name:'WTI 유가'},{no:15,id:'brent',name:'브렌트유'}],after:true},
-    {items:[{no:16,id:'gold',name:'금',ticker:'GC=F'},{no:17,id:'silver',name:'은',ticker:'SI=F'},{no:18,id:'copper',name:'구리',ticker:'HG=F'}],after:true},
+    {items:[{no:9,id:'us2y',name:'미국 2년물'},{no:10,id:'us10y',name:'미국 10년물'}]},
+    {items:[{no:11,id:'us30y',name:'미국 30년물'},{no:12,id:'highyield',name:'하이일드 스프레드'}],after:true},
+    {items:[{no:13,id:'dxy',name:'달러인덱스'},{no:14,id:'usdkRW',name:'원/달러'}]},
+    {items:[{no:15,id:'wti',name:'WTI 유가'},{no:16,id:'brent',name:'브렌트유'}],after:true},
+    {items:[{no:17,id:'gold',name:'금',ticker:'GC=F'},{no:18,id:'silver',name:'은',ticker:'SI=F'},{no:19,id:'copper',name:'구리',ticker:'HG=F'}],after:true},
     {groupTitle:'VIX · S&P 500 Expected Move'},
-    {expectedMoveGroup:{spotId:'sp500',volId:'vix',prefix:'spx',underlyingNote:'S&P 500 기준'},items:[{no:'',id:'vix',name:'S&P 500 변동성 지수 VIX',ticker:'^VIX'}],after:true},
+    {expectedMoveGroup:{spotId:'sp500',volId:'vix',prefix:'spx',underlyingNote:'S&P 500 기준'},items:[{no:20,id:'vix',name:'S&P 500 변동성 지수 VIX',ticker:'^VIX'}],after:true},
     {groupTitle:'VXN · Nasdaq Expected Move'},
-    {expectedMoveGroup:{spotId:'ndx-index',volId:'vxn',prefix:'ndx',underlyingNote:'Nasdaq 100 (NDX) 기준 · VXN 변동성 적용'},items:[{no:'',id:'vxn',name:'VXN',ticker:'^VXN'}],after:true}
+    {expectedMoveGroup:{spotId:'ndx-index',volId:'vxn',prefix:'ndx',underlyingNote:'Nasdaq 100 (NDX) 기준 · VXN 변동성 적용'},items:[{no:21,id:'vxn',name:'VXN',ticker:'^VXN'}],after:true}
   ];
   function makeSummaryCell(ref){
     const cell=document.createElement('div');
@@ -445,7 +445,9 @@ function makeCharts(){
     const byCap=(a,b)=>{const av=Number.isFinite(a.marketCap)&&a.marketCap>0?a.marketCap:null,bv=Number.isFinite(b.marketCap)&&b.marketCap>0?b.marketCap:null;if(av===null&&bv===null)return group.items.indexOf(a)-group.items.indexOf(b);if(av===null)return 1;if(bv===null)return -1;return bv-av;};
     visibleItems.sort((a,b)=>{if(m7Set.has(a.id)&&m7Set.has(b.id))return byCap(a,b);if(a.semiconductorCandidate&&b.semiconductorCandidate)return byCap(a,b);return group.items.indexOf(a)-group.items.indexOf(b);});
     if(!visibleItems.length)return;
-    const heading=document.createElement('div');heading.className='section-heading group-heading';heading.innerHTML=`<div><span class="eyebrow">${group.label==='미국 증시'?'U.S. MARKETS':group.label==='금리·환율·원자재'?'RATES · FX · COMMODITIES':'KOREA MARKETS'}</span><h2>${group.label}</h2></div>`;root.appendChild(heading);
+    if(group.label!=='금리·환율·원자재'){
+      const heading=document.createElement('div');heading.className='section-heading group-heading';heading.innerHTML=`<div><span class="eyebrow">${group.label==='미국 증시'?'U.S. MARKETS':'KOREA MARKETS'}</span><h2>${group.label}</h2></div>`;root.appendChild(heading);
+    }
     let semiconductorWrap=null;
     visibleItems.forEach(item=>{
       // EWY remains in the domestic data/summary group, but its chart is displayed above SOX.
@@ -490,6 +492,14 @@ function makeCharts(){
         });
         hyperscalerControl.appendChild(hyperscalerGrid);
         root.appendChild(hyperscalerControl);
+        const ratesHeading=document.createElement('div');ratesHeading.className='section-heading group-heading';
+        ratesHeading.innerHTML='<div><span class="eyebrow">RATES · FX · COMMODITIES</span><h2>금리·환율·원자재</h2></div>';
+        root.appendChild(ratesHeading);
+      }
+      if(item.id==='vix'){
+        const volatilityHeading=document.createElement('div');volatilityHeading.className='section-heading group-heading';
+        volatilityHeading.innerHTML='<div><span class="eyebrow">VOLATILITY · MARKET RISK</span><h2>변동성 · 시장 위험</h2></div>';
+        root.appendChild(volatilityHeading);
       }
       const card=document.createElement('article');
       card.className='chart-card'+(['sox','nvda-m7','us2y','vix'].includes(item.id)?' chart-divider-before':'');
