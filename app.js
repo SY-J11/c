@@ -667,16 +667,39 @@ if(item.unit==='stock'){
     const latestCompletedPostBars=latestCompletedPostDate?bars.filter(b=>b.date===latestCompletedPostDate&&b.minute>=960&&b.minute<1200):[];
 
     const nowEpoch=Math.floor(Date.now()/1000);
-    // 오늘 날짜의 애프터마켓 1분봉 (앞에서 만든 postToday와 동일한 날짜/세션 필터)
+    // 오늘 애프터마켓 후보: 1분봉과 timestamp가 확인되는 Yahoo Quote를 함께 검사합니다.
+    // 가격값만 최신처럼 보이는 stale quote는 제외하고, 동일 세션의 기록시각으로 최신 후보를 선택합니다.
     const todayPostBars=postToday;
     const latestTodayPostBar=todayPostBars.at(-1)??null;
-    // 1분봉의 시작 시각은 실제 체결 시각보다 최대 1분가량 앞서므로 3분 이내만
-    // 최근 데이터로 인정합니다. Quote는 분봉과 가격 기준이 달라 실시간 후보에서 제외합니다.
     const POST_LIVE_MAX_AGE=3*60;
-    const todayPostBarFresh=latestTodayPostBar!==null&&latestTodayPostBar.time<=nowEpoch&&(nowEpoch-latestTodayPostBar.time)<=POST_LIVE_MAX_AGE;
-    const latestLivePost=todayPostBarFresh?{price:latestTodayPostBar.value,time:latestTodayPostBar.time,source:'1m'}:null;
-    // 애프터마켓 완료 종가도 1분봉에서만 산출하여 Quote와 혼합하지 않습니다.
-    const todayPostClose=lastOf(todayPostBars);
+    const POST_QUOTE_MAX_AGE=5*60;
+    const postCandidates=[];
+    if(latestTodayPostBar&&latestTodayPostBar.time<=nowEpoch&&
+       (nowEpoch-latestTodayPostBar.time)<=POST_LIVE_MAX_AGE){
+      postCandidates.push({price:latestTodayPostBar.value,time:latestTodayPostBar.time,source:'1m'});
+    }
+    // Quote 시간은 거래소 시간대로 해석해 당일 16:00~20:00 ET 기록인지 확인합니다.
+    const quotePostEpoch=Number(quote.postMarketTime);
+    const metaPostEpoch=Number(sessionMeta.postMarketTime??meta.postMarketTime);
+    const addPostQuoteCandidate=(price,epoch,source)=>{
+      if(!Number.isFinite(price)||price<=0||!Number.isFinite(epoch)||epoch<=0||epoch>nowEpoch)return;
+      const qParts=partsAt(epoch),qDate=`${qParts.year}-${qParts.month}-${qParts.day}`;
+      const qMinute=Number(qParts.hour)*60+Number(qParts.minute);
+      if(qDate!==today||qMinute<960||qMinute>=1200||(nowEpoch-epoch)>POST_QUOTE_MAX_AGE)return;
+      postCandidates.push({price,time:epoch,source});
+    };
+    addPostQuoteCandidate(positive(quote.postMarketPrice),quotePostEpoch,'quote');
+    addPostQuoteCandidate(positive(sessionMeta.postMarketPrice)??positive(meta.postMarketPrice),metaPostEpoch,'meta');
+    const latestLivePost=postCandidates.sort((a,b)=>b.time-a.time)[0]??null;
+    // 세션 완료 후에는 당일 애프터마켓 중 가장 늦은 timestamp 후보를 종가로 사용합니다.
+    const completedPostCandidates=todayPostBars.map(b=>({price:b.value,time:b.time,source:'1m'}));
+    const completedQuoteEpochs=[
+      {price:positive(quote.postMarketPrice),time:quotePostEpoch,source:'quote'},
+      {price:positive(sessionMeta.postMarketPrice)??positive(meta.postMarketPrice),time:metaPostEpoch,source:'meta'}
+    ].filter(c=>Number.isFinite(c.price)&&c.price>0&&Number.isFinite(c.time)&&c.time<=nowEpoch)
+      .filter(c=>{const p=partsAt(c.time);return `${p.year}-${p.month}-${p.day}`===today&&Number(p.hour)*60+Number(p.minute)>=960&&Number(p.hour)*60+Number(p.minute)<1200;});
+    completedPostCandidates.push(...completedQuoteEpochs);
+    const todayPostClose=completedPostCandidates.sort((a,b)=>b.time-a.time)[0]?.price??null;
     const latestCompletedPostClose=lastOf(latestCompletedPostBars);
 
 
