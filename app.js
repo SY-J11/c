@@ -284,6 +284,17 @@ async function renderActivityCharts(type,grid){
     card.innerHTML=`<div class="chart-top"><div class="chart-title"><h3>${item.name} [${item.ticker}]</h3></div><div class="quote-block"><div class="quote-close">${closeText(item,item.last)}</div><div class="quote-change ${colorClass(item.delta)}">${changeText(item,item.delta)} · ${pctText(item.pct)}</div><div class="quote-date">거래량 ${fmt(item.activityVolume,0)}</div></div></div><div id="chart-${item.id}" class="chart-area"><div class="chart-empty">차트 불러오는 중…</div></div><div class="chart-foot"><span class="chart-note">${item.ticker}</span><span class="bar-count">거래대금 ${fmt(item.activityTurnover/1e6,1)}M USD</span></div>`;
     item.card=card;grid.appendChild(card);
   });
+  // 거래대금/거래량 스크리너의 상위 종목은 고정 시세 목록에 없으므로,
+  // 펼친 20종목의 Yahoo quote를 별도로 받아 Overnight 세션 정보를 연결합니다.
+  const activitySymbols=[...new Set(config.items.map(item=>item.ticker).filter(Boolean))];
+  if(activitySymbols.length){
+    const quoteTarget=`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(activitySymbols.join(','))}&overnightPrice=true`;
+    const quoteResponse=await fetch(`${PROXY_BASE}/?url=${encodeURIComponent(quoteTarget)}`,{cache:'no-store'});
+    if(!quoteResponse.ok)throw new Error(`상위 종목 애프터마켓 시세 HTTP ${quoteResponse.status}`);
+    const quoteJson=await quoteResponse.json();
+    const activityQuoteMap=new Map((quoteJson?.quoteResponse?.result||[]).map(quote=>[quote.symbol,quote]));
+    config.items.forEach(item=>{item.yahooQuote=activityQuoteMap.get(item.ticker)||null;});
+  }
   let cursor=0;const workers=Array.from({length:5},async()=>{while(cursor<config.items.length){const item=config.items[cursor++];try{const series=await fetchSeries(item);renderOne(item,series);}catch(error){const target=$(`chart-${item.id}`);if(target)target.innerHTML=`<div class="chart-empty">${item.ticker} 차트 조회 실패</div>`;}}});
   await Promise.all(workers);
   config.items.forEach(item=>{
