@@ -605,24 +605,19 @@ if(item.unit==='stock'){
     const currentPre=(quotePrePrice!==null&&(quotePreTimestamp===today||quotePreTimestamp===null)?quotePrePrice:null)??
       (metaPrePrice!==null&&(metaPreTimestamp===today||metaPreTimestamp===null)?metaPrePrice:null)??lastOf(preToday);
     const currentRegular=positive(quoteToday('regularMarketPrice','regularMarketTime'))??positive(metaToday('regularMarketPrice','regularMarketTime'))??lastOf(regularToday);
-    // Yahoo Finance의 Overnight(Blue Ocean ATS) 필드를 기존 애프터마켓 표시 칸에 연결합니다.
-    // 일반 16:00~20:00 애프터마켓 분봉과 혼합하지 않고, Yahoo가 제공하는 실제 Overnight 값을 사용합니다.
-    // Yahoo의 quote API는 Blue Ocean 야간 세션을 marketState=PREPRE일 때
-    // postMarket* 필드에 담아 반환할 수 있습니다. overnightPrice=true로 명시 요청합니다.
+    // Yahoo Finance Overnight(Blue Ocean ATS) 값을 기존 애프터마켓 칸에 표시합니다.
+    // overnightPrice=true 요청으로 받은 overnightMarket* 필드를 우선 사용합니다.
+    // Yahoo가 PREPRE 상태에서 postMarket*에 Overnight 값을 제공하는 경우에만 보조 사용합니다.
     const isYahooOvernight=String(quote.marketState||'').toUpperCase()==='PREPRE';
-    const overnightPrice=
-      positive(numOrNull(quote.overnightMarketPrice))??
+    const overnightPrice=positive(numOrNull(quote.overnightMarketPrice)) ??
       (isYahooOvernight?positive(numOrNull(quote.postMarketPrice)):null);
-    const overnightDelta=
-      numOrNull(quote.overnightMarketChange) ??
+    const overnightDelta=numOrNull(quote.overnightMarketChange) ??
       (isYahooOvernight?numOrNull(quote.postMarketChange):null);
-    const overnightPct=
-      numOrNull(quote.overnightMarketChangePercent) ??
+    const overnightPct=numOrNull(quote.overnightMarketChangePercent) ??
       (isYahooOvernight?numOrNull(quote.postMarketChangePercent):null);
-    const overnightEpoch=Number(
-      quote.overnightMarketTime ??
-      (isYahooOvernight?quote.postMarketTime:null)
-    );
+    const overnightTimeRaw=quote.overnightMarketTime ?? (isYahooOvernight?quote.postMarketTime:null);
+    const overnightEpoch=Number(overnightTimeRaw);
+    const hasOvernightEpoch=Number.isFinite(overnightEpoch)&&overnightEpoch>0;
     const nowEpoch=Math.floor(Date.now()/1000);
     const overnightSessionDate=parts=>{
       if(!parts)return null;
@@ -637,15 +632,15 @@ if(item.unit==='stock'){
       return null;
     };
     const currentOvernightSession=overnightSessionDate(nowParts);
-    const overnightParts=Number.isFinite(overnightEpoch)&&overnightEpoch>0?partsAt(overnightEpoch):null;
+    const overnightParts=hasOvernightEpoch?partsAt(overnightEpoch):null;
     const quoteOvernightSession=overnightSessionDate(overnightParts);
-    const overnightTimeText=overnightParts
+    const overnightTimeText=hasOvernightEpoch
       ?new Intl.DateTimeFormat('en-US',{timeZone,hour:'numeric',minute:'2-digit',second:'2-digit',timeZoneName:'short'}).format(new Date(overnightEpoch*1000))
       :null;
-    const validOvernight=currentOvernightSession!==null&&
-      quoteOvernightSession===currentOvernightSession&&
-      Number.isFinite(overnightEpoch)&&overnightEpoch>0&&overnightEpoch<=nowEpoch+30&&
-      overnightPrice!==null;
+    const validOvernight=currentOvernightSession!==null&&overnightPrice!==null&&
+      (hasOvernightEpoch
+        ?quoteOvernightSession===currentOvernightSession&&overnightEpoch<=nowEpoch+30
+        :Boolean(quote.overnightMarketPrice!==undefined||isYahooOvernight));
     const currentOvernightPrice=validOvernight?overnightPrice:null;
     // 프리마켓 종가는 당일 프리마켓 분봉의 마지막 체결가를 우선하고,
     // 분봉이 없으면 오늘 날짜로 확인된 Yahoo preMarketPrice를 사용합니다.
@@ -698,16 +693,12 @@ if(item.unit==='stock'){
     const preDelta=change(prePrice,preReferenceClose);
     const regularDelta=change(regularPrice,regularReferenceClose);
     const regularPct=pct(regularDelta,regularReferenceClose);
-    const overnightReferenceClose=
-      positive(numOrNull(quote.regularMarketPrice))??
-      positive(regularPrice)??
-      positive(regularReferenceClose);
     const currentOvernightChange=validOvernight&&Number.isFinite(overnightDelta)
       ?overnightDelta
-      :(validOvernight&&overnightReferenceClose!==null?currentOvernightPrice-overnightReferenceClose:null);
+      :(validOvernight&&positive(regularReferenceClose)!==null?currentOvernightPrice-regularReferenceClose:null);
     const currentOvernightPct=validOvernight&&Number.isFinite(overnightPct)
       ?overnightPct
-      :(currentOvernightChange!==null&&overnightReferenceClose!==null?currentOvernightChange/overnightReferenceClose*100:null);
+      :(currentOvernightChange!==null&&positive(regularReferenceClose)!==null?currentOvernightChange/regularReferenceClose*100:null);
     const postPrice=currentOvernightPrice;
     const postDelta=postPrice===null?null:currentOvernightChange;
     const postPct=postPrice===null?null:currentOvernightPct;
