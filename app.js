@@ -305,7 +305,7 @@ function makeSummaryCell(ref){
     const ticker=ref.ticker||all.find(item=>item.id===ref.id)?.ticker;
     const displayName=ref.displayName||`${ref.no!==''&&ref.no!==null&&ref.no!==undefined?`${ref.no}. `:''}${ref.id==='vix'?'VIX':ref.name}${ticker?` [${ticker}]`:''}`;
     const blankOnly=!!ref.blankOnly||!!all.find(item=>item.id===ref.id)?.blankSummary;
-    cell.innerHTML=`<div class="summary-titleline"><div class="summary-label">${displayName}</div>${link}</div>${blankOnly?'':`<div class="summary-price-line"><div class="summary-quote-values"><div class="summary-price">${blank}</div><div class="summary-change neutral">${blank} · ${blank}</div>${all.find(item=>item.id===ref.id)?.unit==='stock'?`<div class="summary-session-box"><div class="summary-session-item"><span class="summary-session-label">프리마켓</span><span class="summary-session-value summary-pre-price">${blank}</span><span class="summary-session-delta summary-pre-delta neutral">${blank}</span><span class="summary-session-pct summary-pre-pct neutral">${blank}</span></div><div class="summary-session-item"><span class="summary-session-label">정규장</span><span class="summary-session-value summary-regular-price">${blank}</span><span class="summary-session-delta summary-regular-delta neutral">${blank}</span><span class="summary-session-pct summary-regular-pct neutral">${blank}</span></div><div class="summary-session-item"><span class="summary-session-label">애프터마켓</span><span class="summary-session-value summary-post-price">${blank}</span><span class="summary-session-delta summary-post-delta neutral">${blank}</span><span class="summary-session-pct summary-post-pct neutral">${blank}</span><span class="summary-session-pct summary-post-time neutral"></span></div></div>`:''}</div></div>`}`;
+    cell.innerHTML=`<div class="summary-titleline"><div class="summary-label">${displayName}</div>${link}</div>${blankOnly?'':`<div class="summary-price-line"><div class="summary-quote-values"><div class="summary-price">${blank}</div><div class="summary-change neutral">${blank} · ${blank}</div>${all.find(item=>item.id===ref.id)?.unit==='stock'?`<div class="summary-session-box"><div class="summary-session-item"><span class="summary-session-label">프리마켓</span><span class="summary-session-value summary-pre-price">${blank}</span><span class="summary-session-delta summary-pre-delta neutral">${blank}</span><span class="summary-session-pct summary-pre-pct neutral">${blank}</span></div><div class="summary-session-item"><span class="summary-session-label">정규장</span><span class="summary-session-value summary-regular-price">${blank}</span><span class="summary-session-delta summary-regular-delta neutral">${blank}</span><span class="summary-session-pct summary-regular-pct neutral">${blank}</span></div><div class="summary-session-item"><span class="summary-session-label">Overnight</span><span class="summary-session-value summary-post-price">${blank}</span><span class="summary-session-delta summary-post-delta neutral">${blank}</span><span class="summary-session-pct summary-post-pct neutral">${blank}</span><span class="summary-session-pct summary-post-time neutral"></span></div></div>`:''}</div></div>`}`;
     cell.dataset.summaryId=ref.id;
     return cell;
   }
@@ -686,12 +686,18 @@ if(item.unit==='stock'){
     const preDelta=change(prePrice,preReferenceClose);
     const regularDelta=change(regularPrice,regularReferenceClose);
     const regularPct=pct(regularDelta,regularReferenceClose);
+    // Yahoo의 Overnight 등락 기준은 전일 종가가 아니라 바로 앞 정규장 종가입니다.
+    // regularMarketPrice가 At close 가격(예: 165.05)이므로 이를 우선 기준가로 사용합니다.
+    const overnightReferenceClose=
+      positive(numOrNull(quote.regularMarketPrice))??
+      positive(regularPrice)??
+      positive(regularReferenceClose);
     const currentOvernightChange=validOvernight&&Number.isFinite(overnightDelta)
       ?overnightDelta
-      :(validOvernight&&positive(regularReferenceClose)!==null?currentOvernightPrice-regularReferenceClose:null);
+      :(validOvernight&&overnightReferenceClose!==null?currentOvernightPrice-overnightReferenceClose:null);
     const currentOvernightPct=validOvernight&&Number.isFinite(overnightPct)
       ?overnightPct
-      :(currentOvernightChange!==null&&positive(regularReferenceClose)!==null?currentOvernightChange/regularReferenceClose*100:null);
+      :(currentOvernightChange!==null&&overnightReferenceClose!==null?currentOvernightChange/overnightReferenceClose*100:null);
     const postPrice=currentOvernightPrice;
     const postDelta=postPrice===null?null:currentOvernightChange;
     const postPct=postPrice===null?null:currentOvernightPct;
