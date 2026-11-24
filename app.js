@@ -667,6 +667,8 @@ if(item.unit==='stock'){
     const latestCompletedPostBars=latestCompletedPostDate?bars.filter(b=>b.date===latestCompletedPostDate&&b.minute>=960&&b.minute<1200):[];
 
     const nowEpoch=Math.floor(Date.now()/1000);
+    // 오늘 날짜의 애프터마켓 1분봉 (앞에서 만든 postToday와 동일한 날짜/세션 필터)
+    const todayPostBars=postToday;
     const latestTodayPostBar=todayPostBars.at(-1)??null;
     // 1분봉의 시작 시각은 실제 체결 시각보다 최대 1분가량 앞서므로 3분 이내만
     // 최근 데이터로 인정합니다. Quote는 분봉과 가격 기준이 달라 실시간 후보에서 제외합니다.
