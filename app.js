@@ -284,15 +284,32 @@ async function renderActivityCharts(type,grid){
     card.innerHTML=`<div class="chart-top"><div class="chart-title"><h3>${item.name} [${item.ticker}]</h3></div><div class="quote-block"><div class="quote-close">${closeText(item,item.last)}</div><div class="quote-change ${colorClass(item.delta)}">${changeText(item,item.delta)} · ${pctText(item.pct)}</div><div class="quote-date">거래량 ${fmt(item.activityVolume,0)}</div></div></div><div id="chart-${item.id}" class="chart-area"><div class="chart-empty">차트 불러오는 중…</div></div><div class="chart-foot"><span class="chart-note">${item.ticker}</span><span class="bar-count">거래대금 ${fmt(item.activityTurnover/1e6,1)}M USD</span></div>`;
     item.card=card;grid.appendChild(card);
   });
-  // 거래대금/거래량 스크리너의 상위 종목은 고정 시세 목록에 없으므로,
-  // 펼친 20종목의 Yahoo quote를 별도로 받아 Overnight 세션 정보를 연결합니다.
+  // 펼침 목록은 스크리너의 동적 종목이므로 별도 Yahoo quote를 연결합니다.
+  // 일괄 요청이 실패해도 차트/기존 데이터 로딩 전체를 중단하지 않고 종목별로 재시도합니다.
   const activitySymbols=[...new Set(config.items.map(item=>item.ticker).filter(Boolean))];
+  const activityQuoteMap=new Map();
   if(activitySymbols.length){
-    const quoteTarget=`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(activitySymbols.join(','))}&overnightPrice=true`;
-    const quoteResponse=await fetch(`${PROXY_BASE}/?url=${encodeURIComponent(quoteTarget)}`,{cache:'no-store'});
-    if(!quoteResponse.ok)throw new Error(`상위 종목 애프터마켓 시세 HTTP ${quoteResponse.status}`);
-    const quoteJson=await quoteResponse.json();
-    const activityQuoteMap=new Map((quoteJson?.quoteResponse?.result||[]).map(quote=>[quote.symbol,quote]));
+    const fetchActivityQuoteBatch=async symbols=>{
+      const target=`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbols.join(','))}&overnightPrice=true`;
+      const response=await fetch(`${PROXY_BASE}/?url=${encodeURIComponent(target)}`,{cache:'no-store'});
+      if(!response.ok)throw new Error(`Yahoo quote HTTP ${response.status}`);
+      const json=await response.json();
+      (json?.quoteResponse?.result||[]).forEach(quote=>activityQuoteMap.set(quote.symbol,quote));
+    };
+    try{
+      await fetchActivityQuoteBatch(activitySymbols);
+    }catch(batchError){
+      console.warn('상위 종목 일괄 Overnight quote 조회 실패, 개별 재시도',batchError);
+      let quoteCursor=0;
+      const quoteWorkers=Array.from({length:4},async()=>{
+        while(quoteCursor<activitySymbols.length){
+          const ticker=activitySymbols[quoteCursor++];
+          try{await fetchActivityQuoteBatch([ticker]);}
+          catch(error){console.warn(`${ticker} Overnight quote 조회 실패`,error);}
+        }
+      });
+      await Promise.all(quoteWorkers);
+    }
     config.items.forEach(item=>{item.yahooQuote=activityQuoteMap.get(item.ticker)||null;});
   }
   let cursor=0;const workers=Array.from({length:5},async()=>{while(cursor<config.items.length){const item=config.items[cursor++];try{const series=await fetchSeries(item);renderOne(item,series);}catch(error){const target=$(`chart-${item.id}`);if(target)target.innerHTML=`<div class="chart-empty">${item.ticker} 차트 조회 실패</div>`;}}});
