@@ -73,7 +73,7 @@ const SEMICONDUCTOR_UNIVERSE=[
   ['arm','ARM','ARM 홀딩스'],['crdo','CRDO','크레도 테크놀로지'],['on','ON','온세미'],
   ['gfs','GFS','글로벌파운드리스'],['q','Q','큐니티 일렉트로닉스'],['entg','ENTG','엔테그리스'],
   ['tsem','TSEM','타워 세미컨덕터'],['mtsi','MTSI','MACOM 테크놀로지'],['sitm','SITM','SiTime'],['lscc','LSCC','래티스 세미컨덕터']
-].map(([id,ticker,name])=>({id,no:5,name,ticker,unit:'stock',semiconductorCandidate:true,summaryActive:false}));
+].map(([id,ticker,name],index)=>({id,no:5,name,ticker,unit:'stock',semiconductorCandidate:true,summaryActive:index<16}));
 const SKHY_ITEM={id:'skhy',no:7,name:'SK hynix ADR',ticker:'SKHY',unit:'stock',percentChart:true};
 // AI infrastructure / model leaders: both are publicly traded on Nasdaq.
 const AI_LEADERS=[
@@ -1092,6 +1092,8 @@ async function refreshAll(){
     (!item.activityType||ACTIVITY_TYPES[item.activityType]?.expanded) &&
     (!item.id.startsWith('hyperscaler-')||hyperscalerExpanded)
   );
+  // 펼침 메뉴의 구성종목 차트를 먼저 준비해 다른 일반 차트 대기열에 밀리지 않게 합니다.
+  queue.sort((a,b)=>Number(!!b.semiconductorCandidate)-Number(!!a.semiconductorCandidate));
   let cursor=0;
   async function worker(){
     while(cursor<queue.length){
