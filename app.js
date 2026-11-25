@@ -759,7 +759,13 @@ if(item.unit==='stock'){
     const preToday=dayBars.filter(b=>b.minute>=240&&b.minute<570);
     const regularToday=dayBars.filter(b=>b.minute>=570&&b.minute<960);
     const postToday=dayBars.filter(b=>b.minute>=960&&b.minute<1200);
-    if(item.unit==='stock'&&item.yahooQuotePromise)await item.yahooQuotePromise;const quote=item.yahooQuote||{};
+    if(item.unit==='stock'&&item.yahooQuotePromise){
+      // EWY는 별도 우선 차트입니다. 대형 시가총액 quote 묶음 응답이 지연되더라도
+      // 일봉 차트 표시가 무기한 대기하지 않도록 보조 세션 quote 대기를 최대 2.5초로 제한합니다.
+      if(item.id==='ewy')await Promise.race([item.yahooQuotePromise,new Promise(resolve=>setTimeout(resolve,2500))]);
+      else await item.yahooQuotePromise;
+    }
+    const quote=item.yahooQuote||{};
     const quoteToday=(priceKey,timeKey)=>dateAt(quote[timeKey])===today?numOrNull(quote[priceKey]):null;
     const metaToday=(priceKey,timeKey)=>dateAt(sessionMeta[timeKey])===today?numOrNull(sessionMeta[priceKey]):dateAt(meta[timeKey])===today?numOrNull(meta[priceKey]):null;
     const positive=value=>Number.isFinite(value)&&value>0?value:null;
