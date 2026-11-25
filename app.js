@@ -1092,8 +1092,17 @@ async function refreshAll(){
     (!item.activityType||ACTIVITY_TYPES[item.activityType]?.expanded) &&
     (!item.id.startsWith('hyperscaler-')||hyperscalerExpanded)
   );
-  // 펼침 메뉴의 구성종목 차트를 먼저 준비해 다른 일반 차트 대기열에 밀리지 않게 합니다.
-  queue.sort((a,b)=>Number(!!b.semiconductorCandidate)-Number(!!a.semiconductorCandidate));
+  // 구성종목 차트가 전체 조회를 독점하지 않도록 일반 차트와 교차 배치합니다.
+  // 첫 2개 구성종목을 먼저 시작하고, 이후 일반 차트 6개마다 구성종목 2개를 배치합니다.
+  const semiconductorQueue=queue.filter(item=>item.semiconductorCandidate);
+  const regularQueue=queue.filter(item=>!item.semiconductorCandidate);
+  const balancedQueue=[];
+  let semiconductorIndex=0,regularIndex=0;
+  while(semiconductorIndex<semiconductorQueue.length||regularIndex<regularQueue.length){
+    for(let i=0;i<2&&semiconductorIndex<semiconductorQueue.length;i++)balancedQueue.push(semiconductorQueue[semiconductorIndex++]);
+    for(let i=0;i<6&&regularIndex<regularQueue.length;i++)balancedQueue.push(regularQueue[regularIndex++]);
+  }
+  queue.splice(0,queue.length,...balancedQueue);
   let cursor=0;
   async function worker(){
     while(cursor<queue.length){
