@@ -189,7 +189,8 @@ function loadSemiconductorCharts(){
       updateSummary();
     }
   };
-  semiconductorLoadPromise=Promise.all(Array.from({length:4},()=>worker())).finally(()=>{semiconductorLoadPromise=null;});
+  // 일반 차트의 기존 8개 동시 조회를 방해하지 않도록 구성종목은 2개씩 처리합니다.
+  semiconductorLoadPromise=Promise.all(Array.from({length:2},()=>worker())).finally(()=>{semiconductorLoadPromise=null;});
   return semiconductorLoadPromise;
 }
 function resizeSemiconductorCharts(){
@@ -1142,11 +1143,14 @@ async function refreshAll(){
       await loadItem(item);
     }
   }
-  await Promise.all([Promise.all(Array.from({length:8},()=>worker())),marketCapsTask]);
+  const regularChartsTask=Promise.all(Array.from({length:8},()=>worker()));
+  // 시가총액 순위가 확정되는 즉시 구성종목 로딩을 시작합니다.
+  // 전체 일반 차트가 끝날 때까지 기다리던 기존 구조를 없애되,
+  // 구성종목은 2개 병렬로 제한해 일반 차트의 응답 속도를 보호합니다.
+  const semiconductorTask=marketCapsTask.then(()=>semiconductorExpanded?loadSemiconductorCharts():undefined);
+  await Promise.all([regularChartsTask,marketCapsTask,semiconductorTask]);
   // EWY가 늦더라도 다른 차트 로딩을 막지 않으며, 전체 상태 집계 전에 완료를 확인합니다.
   await ewyTask;
-  // 펼쳐진 상태라면 일반 차트와 분리된 전용 대기열로 구성종목을 갱신합니다.
-  if(semiconductorExpanded)await loadSemiconductorCharts();
   // 여러 종목에서 변경된 세션 캐시는 모든 조회가 끝난 뒤 한 번만 저장합니다.
   if(sessionCacheDirty){try{localStorage.setItem(SESSION_CACHE_KEY,JSON.stringify(sessionCacheMemory));}catch(e){}}
 
