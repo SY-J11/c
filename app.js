@@ -135,6 +135,8 @@ function applyTheme(dark,save){
 (function(){let saved=null;try{saved=localStorage.getItem('premarket-theme')}catch(e){}if(saved==='dark')applyTheme(true,false)})();
 let ndxVolatility=null; // ^VXN is fetched as a calculation input; it is not shown as a separate chart.
 let semiconductorExpanded=false;
+// 구성종목 조회는 시가총액 순위가 확정된 뒤에만 시작합니다.
+let semiconductorRankingReady=false;
 const ACTIVITY_TYPES={
   turnover:{label:'거래대금 상위(20종목)',metric:'turnover',expanded:false,items:[],containerId:'activity-turnover-summary',chartContainerId:'activity-turnover-charts'},
   volume:{label:'거래량 상위(20종목)',metric:'volume',expanded:false,items:[],containerId:'activity-volume-summary',chartContainerId:'activity-volume-charts'}
@@ -160,37 +162,58 @@ function updateSemiconductorToggles(){
 }
 let semiconductorLoadPromise=null;
 function loadSemiconductorCharts(){
+  // 순위 확정 전에는 기본 목록으로 먼저 조회하지 않습니다.
+  // 그래야 시가총액 상위 16종목이 바뀐 뒤 새로 포함된 종목이 누락되지 않습니다.
+  if(!semiconductorExpanded||!semiconductorRankingReady)return Promise.resolve();
   if(semiconductorLoadPromise)return semiconductorLoadPromise;
-  const pending=SEMICONDUCTOR_UNIVERSE.filter(item=>item.summaryActive&&!item._semiconductorLoaded).sort((a,b)=>(Number(b.marketCap)||0)-(Number(a.marketCap)||0));
-  if(!pending.length)return Promise.resolve();
-  let cursor=0;
-  const worker=async()=>{
-    while(cursor<pending.length){
-      const item=pending[cursor++];
-      if(item._semiconductorLoaded)continue;
-      try{
-        if(!item._semiconductorLoadPromise){
-          const task=(async()=>{
-            const series=await fetchSeries(item);
-            renderOne(item,series);
-            item._semiconductorLoaded=true;
-            return series;
-          })();
-          item._semiconductorLoadPromise=task;
+
+  const run=async()=>{
+    // 매 배치가 끝날 때마다 현재 상위 16종목을 다시 계산합니다.
+    // 순위 변경 도중 시작된 요청이 있어도 새로 포함된 종목을 다음 배치에서 보충합니다.
+    while(semiconductorExpanded){
+      const pending=SEMICONDUCTOR_UNIVERSE
+        .filter(item=>item.summaryActive&&!item._semiconductorLoaded&&(item._semiconductorAttempts||0)<2)
+        .sort((a,b)=>(Number(b.marketCap)||0)-(Number(a.marketCap)||0));
+      if(!pending.length)break;
+      let cursor=0;
+      const worker=async()=>{
+        while(semiconductorExpanded&&cursor<pending.length){
+          const item=pending[cursor++];
+          if(item._semiconductorLoaded||(item._semiconductorAttempts||0)>=2)continue;
+          item._semiconductorAttempts=(item._semiconductorAttempts||0)+1;
+          try{
+            const task=(async()=>{
+              const series=await fetchSeries(item);
+              if(!series||series.inactive!==true&&(!Array.isArray(series.values)||series.values.length<2)){
+                throw new Error('차트 시세 데이터가 충분하지 않습니다.');
+              }
+              renderOne(item,series);
+              item._semiconductorLoaded=true;
+              return series;
+            })();
+            item._semiconductorLoadPromise=task;
+            await task;
+          }catch(error){
+            const container=$(`chart-${item.id}`);
+            if(container)container.innerHTML=`<div class="chart-empty">${item.name} 데이터를 불러오지 못했습니다.<br><small>${String(error.message||error).slice(0,90)} · 새로고침으로 재시도</small></div>`;
+            console.warn(`${item.ticker} 구성종목 차트 조회 실패`,error);
+          }finally{
+            item._semiconductorLoadPromise=null;
+          }
+          updateSummary();
         }
-        await item._semiconductorLoadPromise;
-      }catch(error){
-        const container=$(`chart-${item.id}`);
-        if(container)container.innerHTML=`<div class="chart-empty">${item.name} 데이터를 불러오지 못했습니다.<br><small>${String(error.message||error).slice(0,90)}</small></div>`;
-        console.warn(`${item.ticker} 구성종목 차트 조회 실패`,error);
-      }finally{
-        item._semiconductorLoadPromise=null;
-      }
-      updateSummary();
+      };
+      // 기존 일반 차트 8개 동시 조회는 그대로 두고 구성종목만 최대 2개로 제한합니다.
+      await Promise.all([worker(),worker()]);
     }
   };
-  // 일반 차트의 기존 8개 동시 조회를 방해하지 않도록 구성종목은 2개씩 처리합니다.
-  semiconductorLoadPromise=Promise.all(Array.from({length:2},()=>worker())).finally(()=>{semiconductorLoadPromise=null;});
+  semiconductorLoadPromise=run().finally(()=>{
+    semiconductorLoadPromise=null;
+    // 처리 중 접혔다가 다시 펼쳐지는 경우 남은 항목을 놓치지 않습니다.
+    if(semiconductorExpanded&&semiconductorRankingReady&&SEMICONDUCTOR_UNIVERSE.some(item=>item.summaryActive&&!item._semiconductorLoaded&&(item._semiconductorAttempts||0)<2)){
+      loadSemiconductorCharts();
+    }
+  });
   return semiconductorLoadPromise;
 }
 function resizeSemiconductorCharts(){
@@ -980,6 +1003,7 @@ async function refreshMarketCaps(quoteReadyByTicker=new Map()){
     });
     const selected=new Set(ranked.slice(0,16).map(x=>x.id));
     SEMICONDUCTOR_UNIVERSE.forEach(item=>{item.summaryActive=selected.has(item.id);});
+    semiconductorRankingReady=true;
     const nextSelection=SEMICONDUCTOR_UNIVERSE.filter(x=>x.summaryActive).map(x=>x.id).join(',');
     makeSummary();
     if(previousSelection!==nextSelection||!groups[0].items.some(item=>item.semiconductorCandidate&&item.card)){
@@ -994,6 +1018,7 @@ async function refreshMarketCaps(quoteReadyByTicker=new Map()){
     quoteReadyByTicker.forEach(entry=>entry.resolve(null));
     const previousSelection=SEMICONDUCTOR_UNIVERSE.filter(x=>x.summaryActive).map(x=>x.id).join(',');
     if(!SEMICONDUCTOR_UNIVERSE.some(x=>x.summaryActive))SEMICONDUCTOR_UNIVERSE.slice(0,16).forEach(x=>x.summaryActive=true);
+    semiconductorRankingReady=true;
     const nextSelection=SEMICONDUCTOR_UNIVERSE.filter(x=>x.summaryActive).map(x=>x.id).join(',');
     makeSummary();
     if(previousSelection!==nextSelection||!groups[0].items.some(item=>item.semiconductorCandidate&&item.card)){
@@ -1064,7 +1089,8 @@ async function refreshAll(){
   $('status').parentElement.querySelector('.live-dot').classList.remove('active');
   let success=0,fail=0;
   // 구성종목은 이번 갱신에서 펼쳐진 경우에만 다시 조회합니다.
-  SEMICONDUCTOR_UNIVERSE.forEach(item=>{item._semiconductorLoaded=false;});
+  semiconductorRankingReady=false;
+  SEMICONDUCTOR_UNIVERSE.forEach(item=>{item._semiconductorLoaded=false;item._semiconductorAttempts=0;item._semiconductorLoadPromise=null;});
   // 세션 캐시는 갱신당 한 번만 읽고 메모리에서 공유합니다.
   sessionCacheDirty=false;
   try{sessionCacheMemory=JSON.parse(localStorage.getItem(SESSION_CACHE_KEY)||'{}')||{};}catch(e){sessionCacheMemory={};}
